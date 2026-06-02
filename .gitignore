@@ -1,0 +1,29 @@
+# Secrets — never commit
+.env
+
+# Lead data may contain real names + emails. Ignore EVERYTHING under data/ by
+# default; only the sanitized sample and the run index are ever tracked.
+data/*
+!data/sample_decisionmakers.csv
+!data/RUNS.md
+
+# Apify CLI local state
+storage/
+apify_storage/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# Skill machinery (installed, not source)
+.agents/
+.claude/
+skills-lock.json
