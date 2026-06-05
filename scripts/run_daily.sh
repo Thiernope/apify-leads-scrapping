@@ -85,6 +85,10 @@ S3=( ./scripts/3_find_decision_makers.sh --in "$RUN_DIR/prospects.csv" --run-dir
 [ -n "$DMTITLES" ] && S3+=( --titles "$DMTITLES" )
 "${S3[@]}"
 
+# ---- Build the clean, company-centric leads files (one row per company) ----
+echo; echo "── Building leads (one row per company, best DM + job post) ──"
+python3 scripts/build_leads.py
+
 # ---- summary + run.json + RUNS.md row ----
 SPEND_AFTER="$(total_spend)"
 RUN_COST="$(python3 -c "print('%.2f'%(${SPEND_AFTER}-${SPEND_BEFORE}))")"
@@ -110,6 +114,7 @@ PY
 echo
 echo "════════════════════════════════════════════════════"
 echo " ✓ Done.  Run cost: \$${RUN_COST}   Total to date: \$$(total_spend)"
-echo " Leads:  ${MASTER_CSV}   (+ ${MASTER_JSONL} for AI outreach)"
+echo " LEADS:  ${MASTER_CSV}   ← one row per company, best DM + job post"
+echo "         (+ ${MASTER_JSONL} = full job text + other contacts, for AI)"
 echo " Run:    ${RUN_DIR}"
 echo "════════════════════════════════════════════════════"

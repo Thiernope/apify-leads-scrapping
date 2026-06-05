@@ -46,13 +46,19 @@ What happens:
 ## Where your results land
 ```
 data/
-  master_leads.csv     ← THE FILE YOU USE — every lead found, deduped, with the job that flagged them
-  master_leads.jsonl   ← same leads + full job descriptions (for the future AI emailer)
-  runs/<date>_<time>_<place>/   ← each run's raw files (jobs.json, prospects.csv, …)
+  master_leads.csv     ← THE FILE YOU USE — one row per company:
+                          Company | Location | DM_Name | DM_Title | DM_Email | DM_LinkedIn | JobPost
+  master_leads.jsonl   ← same companies + FULL job descriptions + backup contacts (for an LLM)
+  runs/<date>_<time>_<place>/   ← each run's raw files (jobs.json, prospects.csv, decisionmakers.csv …)
   RUNS.md              ← a log of every run with counts + cost
   state/               ← memory of what's already been scraped/enriched (powers dedup)
 ```
-The run folders are named `YYYY-MM-DD_HHMM_place`, so the **newest sorts to the bottom** — no more guessing which file is latest. `RUNS.md` is the quick history.
+- **`master_leads.csv`** is your outreach sheet: one row per company, the single best
+  decision-maker to email (corporate email + most senior title), and the job post that
+  flagged them. It is rebuilt from all runs each time, so it never holds duplicates.
+- **`master_leads.jsonl`** carries the *complete* job descriptions (all sections) so an
+  LLM can judge fit and draft a personalised email.
+- Run folders are named `YYYY-MM-DD_HHMM_place`, so the **newest sorts to the bottom**.
 
 ## How credits are protected (5 guardrails)
 1. **Confirmation before every charge.** Nothing is spent until you type `y`.

@@ -97,45 +97,51 @@ for attempt in 1 2 3; do
 done
 [ -z "$fetch_ok" ] && { echo "✗ Could not fetch dataset $DS after retries. It's paid for — re-run the flatten later." >&2; exit 1; }
 
-# Flatten: attach the source jobs, dedupe people, write run CSV + append master csv/jsonl.
-python3 - "$RAW" "$JOBS" "$OUT" "$MASTER_CSV" "$MASTER_JSONL" "$STATE_DIR/seen_people.txt" <<'PY'
+# Flatten to the run's decisionmakers.csv (per-person, with job attachment). The
+# company-centric master_leads.csv/.jsonl are built afterwards by build_leads.py.
+python3 - "$RAW" "$JOBS" "$OUT" <<'PY'
 import sys, json, csv, os, re
-raw, jobs_path, out_csv, master_csv, master_jsonl, seen_path = sys.argv[1:7]
+raw, jobs_path, out_csv = sys.argv[1:4]
 data = json.load(open(raw))
 jobs = json.load(open(jobs_path)) if os.path.exists(jobs_path) else []
 
 def norm(u): return (u or "").strip().split("?")[0].rstrip("/").lower()
+def keyname(n): return re.sub(r"[^a-z0-9]", "", (n or "").lower())
 def webmail(e): return any(d in e.lower() for d in ["gmail","yahoo","hotmail","outlook","icloud"])
 def clean(t): return re.sub(r"\s+", " ", (t or "")).strip()
 
-jobs_by_co = {}
+# Index jobs by company URL AND company name — the name fallback fixes the case where
+# the job's company page slug differs from the person's (e.g. a "…careers" page).
+jobs_by_url, jobs_by_name = {}, {}
 for j in jobs:
-    k = norm(j.get("companyLinkedinUrl"))
-    if k: jobs_by_co.setdefault(k, []).append(j)
+    u = norm(j.get("companyLinkedinUrl"))
+    if u: jobs_by_url.setdefault(u, []).append(j)
+    n = keyname(j.get("companyName"))
+    if n: jobs_by_name.setdefault(n, []).append(j)
 sk = lambda j: (j.get("postedAt") or "", j.get("applicantsCount") or 0)  # top = newest, then most applicants
 
 FIELDS = ["Name","Title","Company","Location","Email","EmailType","LinkedIn","OpenRoles",
           "SourceRoles","TopJobTitle","TopJobUrl","TopJobPostedAt","JobLocation",
           "JobFunction","JobSummary","JobIds"]
 
-seen = set(l.strip() for l in open(seen_path)) if os.path.exists(seen_path) else set()
-run_rows, new_records, new_keys = [], [], []
-
+run_rows = []
 for p in data:
     name = ((p.get("firstName") or "")+" "+(p.get("lastName") or "")).strip()
     cp = p.get("currentPosition") or []
     pos = cp[0] if (isinstance(cp, list) and cp) else {}
+    comp = pos.get("companyName", "")
     title = pos.get("position") or pos.get("title") or (p.get("headline") or "")
     emails = [e.get("email") if isinstance(e, dict) else str(e) for e in (p.get("emails") or [])]
     corp = [e for e in emails if not webmail(e)]
     email = corp[0] if corp else (emails[0] if emails else "")
     loc = p.get("location") or {}
     li = p.get("linkedinUrl", "")
-    cojobs = sorted(jobs_by_co.get(norm(pos.get("companyLinkedinUrl")), []), key=sk, reverse=True)
+    cojobs = jobs_by_url.get(norm(pos.get("companyLinkedinUrl"))) or jobs_by_name.get(keyname(comp)) or []
+    cojobs = sorted(cojobs, key=sk, reverse=True)
     top = cojobs[0] if cojobs else {}
     roles = list(dict.fromkeys(clean(j.get("title")) for j in cojobs if j.get("title")))
-    row = {
-        "Name": name, "Title": clean(title)[:80], "Company": pos.get("companyName", ""),
+    run_rows.append({
+        "Name": name, "Title": clean(title)[:80], "Company": comp,
         "Location": (loc.get("linkedinText") if isinstance(loc, dict) else loc) or "",
         "Email": email,
         "EmailType": "corporate" if email and not webmail(email) else ("personal" if email else "none"),
@@ -146,48 +152,36 @@ for p in data:
         "JobFunction": clean(top.get("jobFunction")),
         "JobSummary": clean(top.get("descriptionText"))[:300],
         "JobIds": " | ".join(str(j.get("id")) for j in cojobs if j.get("id") is not None),
-    }
-    run_rows.append(row)
-    key = norm(li) or email.lower()
-    if key and key not in seen:
-        seen.add(key); new_keys.append(key)
-        ind = top.get("industries")
-        if isinstance(ind, list): ind = ind[0] if ind else ""
-        rec = dict(row)
-        rec["jobs"] = [{"id": j.get("id"), "title": clean(j.get("title")),
-            "url": j.get("link") or j.get("jobUrl"), "postedAt": j.get("postedAt"),
-            "location": clean(j.get("location")), "jobFunction": clean(j.get("jobFunction")),
-            "employmentType": j.get("employmentType"), "applicantsCount": j.get("applicantsCount"),
-            "descriptionText": clean(j.get("descriptionText"))} for j in cojobs]
-        rec["company"] = {"employeesCount": top.get("companyEmployeesCount"),
-            "slogan": clean(top.get("companySlogan")), "industry": clean(ind),
-            "website": top.get("companyWebsite")}
-        new_records.append(rec)
+    })
 
 run_rows.sort(key=lambda r: 0 if r["EmailType"] == "corporate" else (1 if r["EmailType"] == "personal" else 2))
-new_set = set(new_keys)
-new_master = [r for r in run_rows if (norm(r["LinkedIn"]) or r["Email"].lower()) in new_set]
-
 with open(out_csv, "w", newline="") as f:
     w = csv.DictWriter(f, fieldnames=FIELDS); w.writeheader(); w.writerows(run_rows)
-exists = os.path.exists(master_csv)
-with open(master_csv, "a", newline="") as f:
-    w = csv.DictWriter(f, fieldnames=FIELDS)
-    if not exists: w.writeheader()
-    w.writerows(new_master)
-with open(master_jsonl, "a") as f:
-    for rec in new_records: f.write(json.dumps(rec, ensure_ascii=False)+"\n")
-with open(seen_path, "a") as f:
-    for k in new_keys: f.write(k+"\n")
-
 print(f"✓ {len(run_rows)} decision-makers this run "
-      f"({sum(1 for r in run_rows if r['Email'])} with email); "
-      f"{len(new_master)} new added to master_leads.")
+      f"({sum(1 for r in run_rows if r['Email'])} with email) -> {out_csv}")
 PY
 
-# Mark these companies as enriched so future runs skip them.
-echo "$INPUT_JSON" | python3 -c 'import sys,json;[print(u) for u in json.load(sys.stdin)["currentCompanies"]]' >> "$STATE_DIR/seen_companies.txt"
+NPROF=$(python3 -c "import json;print(len(json.load(open('$RAW'))))" 2>/dev/null || echo 0)
 rm -f "$RAW"
-
 USD=$(log_cost "$RID" "enrich" "harvestapi/linkedin-profile-search" "$NNEW")
+
+if [ "$NPROF" -eq 0 ]; then
+  # Returned nothing — almost always the Apify free-plan run limit for this premium
+  # pay-per-event actor (separate from your $ credit), a rate limit, or a transient
+  # error — NOT "these companies have no decision-maker". So do NOT burn the companies;
+  # the next run retries them once the limit resets / you upgrade.
+  banner "$C_YEL" \
+    "ENRICHMENT RETURNED 0 PROFILES  (cost \$${USD})" \
+    "" \
+    "Likely cause: Apify free-plan run limit for this premium" \
+    "pay-per-event actor (separate from your \$ credit), a rate" \
+    "limit, or a transient error." \
+    "" \
+    "These ${NNEW} companies were NOT marked done; they retry next run." \
+    "Check plan/usage:  https://console.apify.com/billing"
+  exit 0
+fi
+
+# Got results — mark these companies as enriched so future runs skip them (no re-pay).
+echo "$INPUT_JSON" | python3 -c 'import sys,json;[print(u) for u in json.load(sys.stdin)["currentCompanies"]]' >> "$STATE_DIR/seen_companies.txt"
 echo "✓ Step 3 done -> ${OUT}   (actual cost: \$${USD})"

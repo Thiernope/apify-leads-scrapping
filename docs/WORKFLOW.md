@@ -86,9 +86,14 @@ See [USAGE.md](USAGE.md) for the full guide. Two things make daily runs cheap:
   (Caveat: the jobs scraper can't skip already-seen jobs server-side, so Step 1 still
   bills per job scraped; the company ledger protects the expensive Step 3.)
 
-Each lead in `data/master_leads.csv` carries the job post that flagged it
-(`TopJobTitle`, `TopJobUrl`, `SourceRoles`, `JobSummary`), and `master_leads.jsonl`
-holds the full job descriptions for a future AI outreach step.
+`data/master_leads.csv` is company-centric (one row per company: best decision-maker +
+the `JobPost` that flagged them), and `master_leads.jsonl` holds the **full** job
+descriptions + backup contacts for a future AI outreach step. Both are rebuilt from all
+run folders by `scripts/build_leads.py`, so they are always deduped.
+
+Agencies are filtered **agnostically** (no hardcoded company names): by LinkedIn
+industry, generic name tokens, the company URL slug, and — the catch-all — job
+descriptions that reveal an intermediary posting "on behalf of a client".
 
 ## Cost discipline (measured 2026-06-02)
 | Item | Cost |

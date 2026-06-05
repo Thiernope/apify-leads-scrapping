@@ -82,9 +82,11 @@ credits** — handy for sanity-checking a search before running it:
     --days 30 --count 150 --remote --dry-run
 ```
 
-Outputs land in a timestamped run folder `data/runs/<date>_<time>_<place>/`
-(`jobs.json`, `companies.csv`, `prospects.csv`, `decisionmakers.csv`), and the
-cumulative deduped leads are appended to `data/master_leads.csv` (+ `.jsonl`).
+Each run lands in a timestamped folder `data/runs/<date>_<time>_<place>/`
+(`jobs.json`, `companies.csv`, `prospects.csv`, `decisionmakers.csv`). The leads you
+work from are the **company-centric** files, rebuilt (deduped) from all runs:
+- `data/master_leads.csv` — one row per company: `Company | Location | DM_Name | DM_Title | DM_Email | DM_LinkedIn | JobPost`
+- `data/master_leads.jsonl` — same companies + the **full job descriptions** and backup contacts (for an LLM to assess fit / draft outreach).
 
 ## Budget guardrails
 

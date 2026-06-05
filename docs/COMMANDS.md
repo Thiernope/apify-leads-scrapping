@@ -147,8 +147,8 @@ removed — this feeds Step 3).
     --companies 5 --max 8 --dry-run
 ```
 
-Output: `<run-dir>/decisionmakers.csv` **and** appends to `data/master_leads.csv` +
-`data/master_leads.jsonl` (deduped).
+Output: `<run-dir>/decisionmakers.csv` (per-person, this run). The company-centric
+`data/master_leads.csv` / `.jsonl` are then rebuilt from all runs by `build_leads.py`.
 
 ---
 
@@ -226,17 +226,20 @@ cat data/RUNS.md                # human-readable run history
 
 ```
 data/
-  master_leads.csv     ← THE FILE YOU USE: every lead, deduped, with the job that flagged them
-  master_leads.jsonl   ← same leads + full job descriptions (for the AI emailer)
+  master_leads.csv     ← THE FILE YOU USE: one row per company (best DM + job post), deduped
+                         Company | Location | DM_Name | DM_Title | DM_Email | DM_LinkedIn | JobPost
+  master_leads.jsonl   ← same companies + FULL job descriptions + backup contacts (for an LLM)
   runs/<date>_<time>_<place>/
-      jobs.json        ← raw scraped jobs
+      jobs.json        ← raw scraped jobs (full descriptions live here)
       companies.csv    ← all companies
       prospects.csv    ← companies minus agencies (feeds Step 3)
-      decisionmakers.csv ← this run's contacts
+      decisionmakers.csv ← this run's contacts (per-person)
       run.json         ← this run's stats + cost
   RUNS.md              ← log of every run (counts + cost)
-  state/               ← dedup memory (seen jobs / companies / people) + cost_log.csv
+  state/               ← dedup memory (seen jobs / companies) + cost_log.csv
 ```
+The two `master_leads.*` files are **rebuilt from all run folders each run** (by
+`build_leads.py`), so they are always deduped — re-running only adds new companies.
 
 Run folders are named `YYYY-MM-DD_HHMM_place`, so the **newest sorts to the bottom**.
 

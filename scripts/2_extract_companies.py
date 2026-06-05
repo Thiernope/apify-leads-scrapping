@@ -27,7 +27,7 @@ from collections import defaultdict
 STAFFING_KW = ['robert half', 'vaco', 'randstad', 'adecco', 'manpower', 'kelly services',
     'staffing', 'recruit', 'executive search', 'talent', 'remotehunter', 'jobgether',
     'hays', 'aerotek', 'insight global', 'teksystems', 'hiring', 'headhunt', 'placement',
-    'lhh', 'robert walters', 'michael page', 'search', 'jobs']
+    'lhh', 'robert walters', 'michael page', 'search', 'jobs', 'outsourc', 'bpo']
 
 # 2) LinkedIn's own industry classification — authoritative, works on any scrape.
 STAFFING_INDUSTRY = ['staffing and recruiting', 'outsourcing and offshoring',
@@ -47,6 +47,14 @@ STAFFING_BRANDS = ['dexian', 'kforce', 'korn ferry', 'jobot', 'ledgent', 'beacon
 #    'search' is excluded on purpose (it matches "re-search", e.g. duetto-research).
 STAFFING_URL = ['staffing', 'recruit', 'headhunt', 'talent']
 
+# 5) AGNOSTIC catch-all: the job description itself reveals an intermediary that posts
+#    "on behalf of a client" (staffing/outsourcing/BPO). This works on ANY company,
+#    even when the name looks normal and LinkedIn mislabels the industry to the
+#    client's sector (e.g. an outsourcer's post tagged "Motor Vehicle Manufacturing").
+INTERMEDIARY_DESC = ['client overview', 'our client is', 'the client is a',
+    'on behalf of our client', 'on behalf of a client', 'for our client',
+    'about our client', "our client's", 'the client seeks', 'our client,']
+
 # Placeholder names job posters use to hide their identity — no real company to find.
 PLACEHOLDER = ['confidential']
 
@@ -56,9 +64,14 @@ def get(d, *keys):
             return d[k]
     return ""
 
-def is_staffing(name, industry="", url=""):
+def has_intermediary_language(text):
+    t = (text or "").lower()
+    return any(p in t for p in INTERMEDIARY_DESC)
+
+def is_staffing(name, industry="", url="", intermediary=False):
     n = name.lower(); ind = (industry or "").lower(); u = (url or "").lower()
-    return (any(k in n for k in STAFFING_KW)
+    return (intermediary
+            or any(k in n for k in STAFFING_KW)
             or any(k in ind for k in STAFFING_INDUSTRY)
             or any(b in n for b in STAFFING_BRANDS)
             or any(k in u for k in STAFFING_URL)
@@ -78,13 +91,17 @@ def main():
 
     companies = defaultdict(lambda: {"jobTitles": set(), "count": 0,
                                      "linkedinUrl": "", "website": "",
-                                     "location": "", "industry": "", "jobUrl": ""})
+                                     "location": "", "industry": "", "jobUrl": "",
+                                     "intermediary": False})
     for j in jobs:
         name = get(j, "companyName", "company").strip()
         if not name:
             continue
         c = companies[name]
         c["count"] += 1
+        # flag if ANY of this company's posts talk about "our client" etc.
+        if has_intermediary_language(get(j, "descriptionText", "descriptionHtml")):
+            c["intermediary"] = True
         title = get(j, "title")
         if title:
             c["jobTitles"].add(title.strip())
@@ -126,7 +143,7 @@ def main():
         all_path = base.format(kind="companies") + ".csv"
         pro_path = base.format(kind="prospects") + ".csv"
     prospects = [(n, c) for n, c in rows
-                 if not is_staffing(n, c["industry"], c["linkedinUrl"])]
+                 if not is_staffing(n, c["industry"], c["linkedinUrl"], c["intermediary"])]
     write(all_path, rows)
     write(pro_path, prospects)
 

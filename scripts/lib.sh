@@ -3,6 +3,24 @@
 # Sourced by the step scripts AFTER they cd to the project root and source .env.
 
 UA="${UA:-apify-agent-skills/apify-ultimate-scraper}"
+
+# ---- colored output (auto-disabled when not a terminal, or when NO_COLOR is set) ----
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+  C_RED=$'\033[1;31m'; C_YEL=$'\033[1;33m'; C_GRN=$'\033[1;32m'; C_DIM=$'\033[2m'; C_RST=$'\033[0m'
+else
+  C_RED=''; C_YEL=''; C_GRN=''; C_DIM=''; C_RST=''
+fi
+ok()   { printf "%s✓ %s%s\n" "$C_GRN" "$*" "$C_RST"; }
+warn() { printf "%s⚠ %s%s\n" "$C_YEL" "$*" "$C_RST" >&2; }
+err()  { printf "%s✗ %s%s\n" "$C_RED" "$*" "$C_RST" >&2; }
+# A boxed banner in the given color: banner <color-var> <line> [<line> ...]
+banner() {
+  local col="$1"; shift
+  printf "%s┌──────────────────────────────────────────────────────────────┐%s\n" "$col" "$C_RST" >&2
+  local l; for l in "$@"; do printf "%s│%s %-60s %s│%s\n" "$col" "$C_RST" "$l" "$col" "$C_RST" >&2; done
+  printf "%s└──────────────────────────────────────────────────────────────┘%s\n" "$col" "$C_RST" >&2
+}
+
 STATE_DIR="data/state"
 RUNS_DIR="data/runs"
 MASTER_CSV="data/master_leads.csv"
