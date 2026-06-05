@@ -83,8 +83,11 @@ confirm "Enrich ${NNEW} companies now (rough est. ~\$${EST})?" || exit 0
 
 RUN=$(apify actors call "harvestapi/linkedin-profile-search" -i "$INPUT_JSON" --user-agent "$UA" --json 2>/dev/null)
 RID=$(echo "$RUN" | python3 -c "import sys,json;print(json.load(sys.stdin).get('id',''))")
-DS=$(echo "$RUN" | python3 -c "import sys,json;print(json.load(sys.stdin)['defaultDatasetId'])")
-echo "  status: $(echo "$RUN" | python3 -c "import sys,json;print(json.load(sys.stdin)['status'])") | dataset: ${DS}"
+DS=$(echo "$RUN"  | python3 -c "import sys,json;print(json.load(sys.stdin)['defaultDatasetId'])")
+STATUS=$(echo "$RUN" | python3 -c "import sys,json;print(json.load(sys.stdin).get('status',''))")
+SMSG=$(echo "$RUN"   | python3 -c "import sys,json;print(json.load(sys.stdin).get('statusMessage') or '')")
+# "SUCCEEDED" only means the actor finished without crashing — not that it returned data.
+echo "  actor run finished: ${STATUS}${SMSG:+ (\"$SMSG\")} | dataset: ${DS}"
 
 # Fetch the dataset, retrying if the first pull comes back empty (a transient quirk
 # right after the run finishes — see harvestapi-profile-search-quirks memory).
@@ -170,12 +173,15 @@ if [ "$NPROF" -eq 0 ]; then
   # pay-per-event actor (separate from your $ credit), a rate limit, or a transient
   # error — NOT "these companies have no decision-maker". So do NOT burn the companies;
   # the next run retries them once the limit resets / you upgrade.
+  # The actor run "SUCCEEDED" (finished cleanly) but returned nothing. Apify's own
+  # statusMessage usually says why — surface it verbatim so the cause is definitive.
+  [ -n "$SMSG" ] && warn "Apify says: \"$SMSG\""
   banner "$C_YEL" \
     "ENRICHMENT RETURNED 0 PROFILES  (cost \$${USD})" \
     "" \
-    "Likely cause: Apify free-plan run limit for this premium" \
-    "pay-per-event actor (separate from your \$ credit), a rate" \
-    "limit, or a transient error." \
+    "The actor finished OK but did no work. Usual cause: the" \
+    "Apify free-plan run limit for this premium pay-per-event" \
+    "actor (separate from your \$ credit), or a rate limit." \
     "" \
     "These ${NNEW} companies were NOT marked done; they retry next run." \
     "Check plan/usage:  https://console.apify.com/billing"
